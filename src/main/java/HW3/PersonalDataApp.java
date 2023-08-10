@@ -3,9 +3,7 @@ package HW3;
 import java.io.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Scanner;
+import java.util.*;
 import java.util.regex.Pattern;
 
 // Создаем новый тип исключения для некорректных данных
@@ -43,7 +41,7 @@ public class PersonalDataApp {
         System.out.println("Завершение приложения.");
     }
 
-    private static void processInput(String input) throws InvalidDataException, IOException {
+    private static void processInput(String input) throws IOException, InvalidDataException {
         String[] dataParts = input.split(" ");
 
         if (dataParts.length != 6) {
@@ -57,8 +55,10 @@ public class PersonalDataApp {
         String phoneNumberStr = dataParts[4];
         String genderStr = dataParts[5];
 
+        List<String> errors = new ArrayList<>();
+
         if (!isValidName(lastName) || !isValidName(firstName) || !isValidName(middleName)) {
-            throw new InvalidDataException("Некорректные значения для фамилии, имени или отчества.");
+            errors.add("Некорректные значения для фамилии, имени или отчества.");
         }
 
         try {
@@ -68,26 +68,31 @@ public class PersonalDataApp {
             long phoneNumber = parsePhoneNumber(phoneNumberStr);
 
             validateGender(genderStr);
-
-            String record = String.format("<%s><%s><%s><%s> <%s><%s>",
-                    lastName, firstName, middleName, birthDateStr, phoneNumberStr, genderStr);
-
-            if (!isDuplicateRecord(record, lastName + ".txt")) {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(lastName + ".txt", true))) {
-                    writer.write(record);
-                    writer.newLine();
-                }
-                System.out.println("Данные успешно записаны в файл.");
-            } else {
-                System.out.println("Такая запись уже существует. Данные не будут записаны.");
-            }
-
         } catch (NumberFormatException e) {
-            throw new InvalidDataException("Ошибка парсинга числового значения: " + e.getMessage());
+            errors.add("Ошибка парсинга числового значения: " + e.getMessage());
         } catch (IllegalArgumentException e) {
-            throw new InvalidDataException("Ошибка валидации данных: " + e.getMessage());
+            errors.add("Ошибка валидации данных: " + e.getMessage());
         } catch (ParseException e) {
-            throw new InvalidDataException("Ошибка парсинга даты: " + e.getMessage());
+            errors.add("Ошибка ввода даты рождения.");
+        }
+
+        if (!errors.isEmpty()) {
+            throw new InvalidDataException(String.join(" ", errors));
+        }
+
+        String record = String.format("<%s><%s><%s><%s> <%s><%s>",
+                lastName, firstName, middleName, birthDateStr, phoneNumberStr, genderStr);
+
+        if (!isDuplicateRecord(record, lastName + ".txt")) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(lastName + ".txt", true))) {
+                writer.write(record);
+                writer.newLine();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            System.out.println("Данные успешно записаны в файл.");
+        } else {
+            System.out.println("Такая запись уже существует. Данные не будут записаны.");
         }
     }
 
@@ -129,9 +134,17 @@ public class PersonalDataApp {
         try {
             date = dateFormat.parse(dateStr);
         } catch (ParseException e) {
-            throw new InvalidDataException("Некорректный формат даты. Используйте формат: dd.MM.yyyy");
+            throw new InvalidDataException("Ошибка ввода даты рождения.");
         }
 
+        if (!isValidDayAndMonth(date)) {
+            throw new InvalidDataException("Ошибка ввода даты рождения.");
+        }
+
+        return date;
+    }
+
+    private static boolean isValidDayAndMonth(Date date) {
         Calendar calendar = Calendar.getInstance();
         calendar.setTime(date);
 
@@ -139,35 +152,17 @@ public class PersonalDataApp {
         int month = calendar.get(Calendar.MONTH);
         int day = calendar.get(Calendar.DAY_OF_MONTH);
 
-        // Проверка на месяц и количество дней в зависимости от дня и месяца
         boolean isValidMonth = (month >= 0 && month <= 11);
         boolean isValidDay = (day > 0 && day <= 31);
 
-        if (!isValidMonth) {
-            throw new InvalidDataException("Некорректный номер месяца. Месяц должен быть в диапазоне 1-12.");
+        boolean isValidNumberOfDays = true;
+        if ((day > 30 && (month == 3 || month == 5 || month == 8 || month == 10)) ||
+                (day > 29 && month == 1 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) ||
+                (day > 28 && month == 1)) {
+            isValidNumberOfDays = false;
         }
 
-        if (!isValidDay) {
-            throw new InvalidDataException("Некорректный номер дня. День должен быть в диапазоне 1-31.");
-        }
-
-        if (!isValidDay && (month == 3 || month == 5 || month == 8 || month == 10)) {
-            throw new InvalidDataException("Превышено количество дней в месяце. В этом месяце может быть не более 30 дней.");
-        } else if (!isValidDay && month == 1 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
-            throw new InvalidDataException("Превышено количество дней в месяце. В феврале високосного года может быть не более 29 дней.");
-        } else if (!isValidDay && month == 1) {
-            throw new InvalidDataException("Превышено количество дней в месяце. В феврале обычного года может быть не более 28 дней.");
-        }
-
-        if (!isValidDay && !isValidMonth) {
-            throw new InvalidDataException("Некорректный номер месяца и дня. Месяц должен быть в диапазоне 1-12, а день в диапазоне 1-31.");
-        } else if (!isValidDay) {
-            throw new InvalidDataException("Некорректный номер дня. День должен быть в диапазоне 1-31.");
-        } else if (!isValidMonth) {
-            throw new InvalidDataException("Некорректный номер месяца. Месяц должен быть в диапазоне 1-12.");
-        }
-
-        return date;
+        return isValidMonth && isValidDay && isValidNumberOfDays;
     }
 }
 
